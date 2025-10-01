@@ -21,7 +21,7 @@ admin.initializeApp({
 // ---------------- APP ----------------
 const app = express();
 
-const isProduction = process.env.NODE_ENV === "production"; // false
+const isProduction = process.env.NODE_ENV === "production";
 
 app.use(
   cors({
@@ -58,12 +58,10 @@ app.post("/user_validation", async (req, res) => {
   const idToken = authHeader.split(" ")[1];
 
   try {
-    // Verify Firebase ID token
     const decoded = await admin.auth().verifyIdToken(idToken);
 
     let rawResult = await UserData.findOne({ email: decoded.email });
 
-    // Auto-create student if not exists
     if (!rawResult) {
       rawResult = new UserData({
         email: decoded.email,
@@ -76,7 +74,6 @@ app.post("/user_validation", async (req, res) => {
 
     const result = rawResult.toObject();
 
-    // Sign JWT for permissions
     const tokenForPermissions = jwt.sign(
       {
         id: result._id,
@@ -88,11 +85,11 @@ app.post("/user_validation", async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    // Set cookie
+    // ⚡ FIXED COOKIE SETTINGS
     res.cookie("tokenForPermissions", tokenForPermissions, {
       httpOnly: true,
-      secure: true, // ✅ must be true in production for SameSite=None
-      sameSite: "none", // ✅ allows cross-site cookies
+      secure: true,           // Must be true in production for SameSite=None
+      sameSite: "none",       // Allows cross-site cookies
       maxAge: 24 * 60 * 60 * 1000,
     });
 
