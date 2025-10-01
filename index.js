@@ -13,19 +13,27 @@ const UserData = require("./models/UserData");
 const UserVerification = require("./middleware/UserVerification");
 
 // ---------------- FIREBASE ----------------
-const serviceAccount = require("./config/serviceAccountKey.json");
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
 // ---------------- APP ----------------
 const app = express();
+
+const isProduction = process.env.NODE_ENV === "production"; // false
+
 app.use(
   cors({
-    origin: ["http://localhost:5173"], // your frontend
-    credentials: true,
+    origin: [
+      "http://localhost:5173",
+      "http://192.168.0.107:5173",
+      "https://quiz-app-l3bk.onrender.com",
+    ],
+    credentials: true, // ✅ allow cookies
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -55,7 +63,7 @@ app.post("/user_validation", async (req, res) => {
 
     let rawResult = await UserData.findOne({ email: decoded.email });
 
-    // If no user data found → auto-create student role
+    // Auto-create student if not exists
     if (!rawResult) {
       rawResult = new UserData({
         email: decoded.email,
@@ -68,23 +76,24 @@ app.post("/user_validation", async (req, res) => {
 
     const result = rawResult.toObject();
 
-    // Sign a short-lived JWT for permissions
+    // Sign JWT for permissions
     const tokenForPermissions = jwt.sign(
       {
         id: result._id,
         permissions: result.permissions,
         email: result.email,
-        role: result?.role,
+        role: result.role,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
+    // Set cookie
     res.cookie("tokenForPermissions", tokenForPermissions, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      secure: isProduction, // ✅ true on Render (https), false locally
+      sameSite: isProduction ? "none" : "lax", // ✅ none for cross-site, lax in dev
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
     const { _id, email, role, permissions } = result;
@@ -95,9 +104,10 @@ app.post("/user_validation", async (req, res) => {
   }
 });
 
-// quiz req
+// quiz route (protected)
 app.get("/quiz", UserVerification, async (req, res) => {
-  console.log("quiz req");
+  console.log("➡️ Quiz request received");
+  res.json({ message: "Quiz data would go here" });
 });
 
 // ---------------- DB + SERVER ----------------
@@ -106,9 +116,8 @@ const PORT = process.env.PORT || 5000;
 
 mongoose
   .connect(MONGO_URI)
-  .then(async () => {
+  .then(() => {
     console.log("✅ Connected to MongoDB");
-
     app.listen(PORT, () =>
       console.log(`🚀 Server running on http://localhost:${PORT}`)
     );
