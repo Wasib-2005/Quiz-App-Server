@@ -25,7 +25,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "http://192.168.0.107:5173",
-      "https://quiz-app-beryl-pi.vercel.app/",
+      "https://quiz-app-beryl-pi.vercel.app",
     ],
     credentials: true,
   })
