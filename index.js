@@ -91,8 +91,8 @@ app.post("/user_validation", async (req, res) => {
     // Set cookie
     res.cookie("tokenForPermissions", tokenForPermissions, {
       httpOnly: true,
-      secure: isProduction, // ✅ true on Render (https), false locally
-      sameSite: isProduction ? "none" : "lax", // ✅ none for cross-site, lax in dev
+      secure: true, // ✅ must be true in production for SameSite=None
+      sameSite: "none", // ✅ allows cross-site cookies
       maxAge: 24 * 60 * 60 * 1000,
     });
 
