@@ -2,14 +2,13 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const admin = require("firebase-admin");
 
 // ---------------- MODELS ----------------
 const UserData = require("./models/UserData");
 
-// ---------------- middleware ----------------
+// ---------------- MIDDLEWARE ----------------
 const UserVerification = require("./middleware/UserVerification");
 
 // ---------------- FIREBASE ----------------
@@ -21,8 +20,6 @@ admin.initializeApp({
 // ---------------- APP ----------------
 const app = express();
 
-const isProduction = process.env.NODE_ENV === "production";
-
 app.use(
   cors({
     origin: [
@@ -30,12 +27,11 @@ app.use(
       "http://192.168.0.107:5173",
       "https://quiz-app-l3bk.onrender.com",
     ],
-    credentials: true, // ✅ allow cookies
+    credentials: true,
   })
 );
 
 app.use(express.json());
-app.use(cookieParser());
 
 // ---------------- ROUTES ----------------
 
@@ -44,7 +40,7 @@ app.get("/", (req, res) => {
   res.send("🚀 Quiz App Server running");
 });
 
-// ✅ Verify Firebase ID token and set cookie
+// ✅ Verify Firebase ID token and return JWT
 app.post("/user_validation", async (req, res) => {
   console.log("➡️ Received /user_validation request");
   const authHeader = req.headers.authorization;
@@ -74,6 +70,7 @@ app.post("/user_validation", async (req, res) => {
 
     const result = rawResult.toObject();
 
+    // JWT valid for session only (e.g., short-lived token)
     const tokenForPermissions = jwt.sign(
       {
         id: result._id,
@@ -82,19 +79,19 @@ app.post("/user_validation", async (req, res) => {
         role: result.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "1h" } // ✅ Session lifetime: adjust as needed
     );
 
-    // ⚡ FIXED COOKIE SETTINGS
-    res.cookie("tokenForPermissions", tokenForPermissions, {
-      httpOnly: true,
-      secure: true,           // Must be true in production for SameSite=None
-      sameSite: "none",       // Allows cross-site cookies
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-
     const { _id, email, role, permissions } = result;
-    res.status(200).json({ id: _id, email, role, permissions });
+
+    // ❌ DO NOT set cookie — send JWT in response
+    res.status(200).json({
+      id: _id,
+      email,
+      role,
+      permissions,
+      token: tokenForPermissions,
+    });
   } catch (err) {
     console.error("❌ Token verification failed:", err);
     res.status(401).json({ error: "Unauthorized" });
