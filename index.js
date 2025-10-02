@@ -114,6 +114,42 @@ app.get("/quiz", UserVerification, async (req, res) => {
   }
 });
 
+//
+app.post("/submit_answers", UserVerification, async (req, res) => {
+  try {
+    const { quizCode, studentAnswers } = req.body;
+
+    const quizData = await QuizData.findById(quizCode);
+
+    const quizAnswers = quizData?.questions?.map((i, index) => ({
+      question: i.question,
+      questionNo: index,
+      answer: i.correct,
+      score: i.score,
+    }));
+
+    if (studentAnswers.length === quizAnswers.length) {
+      for (let index = 0; index < studentAnswers.length; index++) {
+        const studentAnswer = studentAnswers[index];
+        const correctAnswer = quizAnswers[index].answer;
+
+        studentAnswers[index].score = quizAnswers[index].score;
+
+        studentAnswers[index].isCorrect =
+          Number(studentAnswer.answer) === Number(correctAnswer);
+      }
+      studentAnswers.questionID = quizData._id;
+      studentAnswers.date = quizData.date;
+      console.log(studentAnswers);
+    }
+
+    res.status(200).json({ studentAnswers });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // Connect DB + Start server
 mongoose
   .connect(process.env.MONGO_URI)
