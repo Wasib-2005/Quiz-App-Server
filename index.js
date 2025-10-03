@@ -8,6 +8,7 @@ require("dotenv").config();
 // Models
 const UserData = require("./models/userDataSchema");
 const QuizData = require("./models/questionSchema");
+const QuizAnswer = require("./models/quizAnswerSchema");
 
 // Middleware
 const UserVerification = require("./middleware/UserVerification");
@@ -74,40 +75,117 @@ app.post("/user_validation", async (req, res) => {
   }
 });
 
-// ✅ Quiz route (protected)
-app.get("/quiz", UserVerification, async (req, res) => {
+// ✅ Quiz Test Route (only check status, no quiz data returned)
+// ✅ Quiz test route (basic info only)
+app.get("/quizTest", UserVerification, async (req, res) => {
   const { quizCode } = req.query;
+  const { user } = req;
 
   try {
+    // 1️⃣ Find quiz
     const quizData = await QuizData.findById(quizCode);
-
     if (!quizData) {
       return res.status(404).json({ error: "❌ Wrong quiz code!" });
     }
 
-    const now = new Date();
+    // 2️⃣ Check if user already answered
+    const previousResult = await QuizAnswer.findOne({
+      quizId: quizData._id,
+      userId: user.id,
+    });
 
-    // Check start date if it exists
+    if (previousResult) {
+      return res.status(400).json({
+        error: "✅ You already answered this quiz",
+      });
+    }
+
+    // 3️⃣ Check start & deadline
+    const now = new Date();
     if (quizData.date && now < new Date(quizData.date)) {
       return res.status(403).json({
         error: "🕒 Quiz not started yet! Please wait until the start time.",
       });
     }
 
-    // Check deadline if it exists
     if (quizData.dateLine && now > new Date(quizData.dateLine)) {
       return res.status(403).json({
         error: "⏰ Time’s up! The quiz deadline has passed.",
       });
     }
 
-    // Remove "correct" field before sending
-    const quizWithoutCorrect = quizData.toObject(); // Convert to plain JS object
+    // 4️⃣ Prepare total needed time (sum of all questions)
+    const totalNeededTime = quizData.questions.reduce(
+      (acc, q) => acc + Number(q.neededTime || 0),
+      0
+    );
+
+    // 5️⃣ Send only safe/basic info (no answers)
+    res.status(200).json({
+      quizId: quizData._id,
+      title: quizData.title,
+      description: quizData.description,
+      author: quizData.author,
+      totalQuestions: quizData.questions.length,
+      totalNeededTime,
+      startDate: quizData.date,
+      deadline: quizData.dateLine,
+      success: "✅ Quiz is available to start!",
+    });
+  } catch (error) {
+    console.error("❌ Error in /quizTest:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/quiz", UserVerification, async (req, res) => {
+  const { quizCode } = req.query;
+  const { user } = req;
+
+  try {
+    // 1️⃣ Find quiz
+    const quizData = await QuizData.findById(quizCode);
+    if (!quizData) {
+      return res.status(404).json({ error: "❌ Wrong quiz code!" });
+    }
+
+    // 2️⃣ Check if user already answered this quiz
+    const previousResult = await QuizAnswer.findOne({
+      quizId: quizData._id,
+      userId: user.id,
+    });
+
+    if (previousResult) {
+      return res.status(400).json({
+        error: "✅ You already answered this quiz",
+        quizId: quizData._id,
+        totalScore: previousResult.totalScore,
+        answers: previousResult.answers,
+        date: previousResult.date,
+      });
+    }
+
+    // 3️⃣ Check start & deadline
+    const now = new Date();
+    if (quizData.date && now < new Date(quizData.date)) {
+      return res.status(403).json({
+        error: "🕒 Quiz not started yet! Please wait until the start time.",
+      });
+    }
+
+    if (quizData.dateLine && now > new Date(quizData.dateLine)) {
+      return res.status(403).json({
+        error: "⏰ Time’s up! The quiz deadline has passed.",
+      });
+    }
+
+    // 4️⃣ Remove "correct" field before sending
+    const quizWithoutCorrect = quizData.toObject();
     quizWithoutCorrect.questions = quizWithoutCorrect.questions.map(
       ({ correct, ...rest }) => rest
     );
 
-    res.json(quizWithoutCorrect);
+    res.status(200).json(quizWithoutCorrect);
   } catch (error) {
     console.error("❌ Error fetching quiz:", error);
     res.status(500).json({ error: "Server error" });
@@ -118,34 +196,64 @@ app.get("/quiz", UserVerification, async (req, res) => {
 app.post("/submit_answers", UserVerification, async (req, res) => {
   try {
     const { quizCode, studentAnswers } = req.body;
+    const { user } = req;
 
+    // 1️⃣ Find quiz
     const quizData = await QuizData.findById(quizCode);
-
-    const quizAnswers = quizData?.questions?.map((i, index) => ({
-      question: i.question,
-      questionNo: index,
-      answer: i.correct,
-      score: i.score,
-    }));
-
-    if (studentAnswers.length === quizAnswers.length) {
-      for (let index = 0; index < studentAnswers.length; index++) {
-        const studentAnswer = studentAnswers[index];
-        const correctAnswer = quizAnswers[index].answer;
-
-        studentAnswers[index].score = quizAnswers[index].score;
-
-        studentAnswers[index].isCorrect =
-          Number(studentAnswer.answer) === Number(correctAnswer);
-      }
-      studentAnswers.questionID = quizData._id;
-      studentAnswers.date = quizData.date;
-      console.log(studentAnswers);
+    if (!quizData) {
+      return res.status(404).json({ error: "Quiz not found" });
     }
 
-    res.status(200).json({ studentAnswers });
+    // 2️⃣ Extract correct answers
+    const quizAnswers = quizData.questions.map((q, index) => ({
+      question: q.question,
+      questionNo: index,
+      correctAnswer: q.correct,
+      score: q.score,
+    }));
+
+    // 3️⃣ Validate answers length
+    if (studentAnswers.length !== quizAnswers.length) {
+      return res.status(400).json({ error: "Invalid number of answers" });
+    }
+
+    // 4️⃣ Grade answers
+    let totalScore = 0;
+    const gradedAnswers = studentAnswers.map((ans, index) => {
+      const correctAnswer = quizAnswers[index].correctAnswer;
+      const score = quizAnswers[index].score;
+
+      const isCorrect = Number(ans.answer) === Number(correctAnswer);
+      if (isCorrect) totalScore += Number(score);
+
+      return {
+        ...ans,
+        question: quizAnswers[index].question,
+        questionNo: quizAnswers[index].questionNo,
+        score,
+        isCorrect,
+      };
+    });
+
+    // 5️⃣ Save result in QuizAnswer collection
+    const quizAnswerDoc = new QuizAnswer({
+      quizId: quizData._id,
+      userId: user.id,
+      totalScore,
+      answers: gradedAnswers,
+    });
+
+    await quizAnswerDoc.save();
+
+    // 6️⃣ Send response
+    res.status(200).json({
+      message: "✅ Answers submitted successfully",
+      totalScore,
+      quizId: quizData._id,
+      answers: gradedAnswers,
+    });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Error in /submit_answers:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
