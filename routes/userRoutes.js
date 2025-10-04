@@ -30,7 +30,7 @@ router.post("/validation", asyncHandler(async (req, res) => {
     email: user.email,
     role: user.role,
     permissions: user.permissions
-  }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  }, process.env.JWT_SECRET, { expiresIn: "3h" });
 
   res.status(200).json({
     id: user._id,

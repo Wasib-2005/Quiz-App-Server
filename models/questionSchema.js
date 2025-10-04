@@ -14,12 +14,13 @@ const questionSchema = new mongoose.Schema({
 
 const quizSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "users", required: true }, // ✅ Added
     author: { type: String, required: true },
     title: { type: String, required: true },
     description: { type: String },
     questions: { type: [questionSchema], required: true },
-    date: { type: Date },      // START date of the quiz
-    dateLine: { type: Date },  // DEADLINE date of the quiz
+    date: { type: Date },
+    dateLine: { type: Date },
   },
   { timestamps: true }
 );
