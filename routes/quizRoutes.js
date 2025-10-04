@@ -67,6 +67,32 @@ router.get(
   })
 );
 
+router.get(
+  "/all_quiz_teacher",
+  UserVerification,
+  asyncHandler(async (req, res) => {
+    const quizzes = await QuizData.find({ userId: req.user.id });
+    res.status(200).json(quizzes);
+  })
+);
+
+router.get(
+  "/teacher/:quizId",
+  UserVerification,
+  asyncHandler(async (req, res) => {
+    const { quizId } = req.params;
+
+    const quiz = await QuizData.findOne({ _id: quizId, userId: req.user.id });
+
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found or access denied" });
+    }
+
+    res.status(200).json(quiz);
+  })
+);
+
+
 // 📘 Create new quiz
 router.post(
   "/create",
@@ -104,9 +130,7 @@ router.put(
     const quiz = await QuizData.findOne({ _id: quizId, userId: req.user.id });
 
     if (!quiz) {
-      return res.status(404).json({
-        error: "Quiz not found or you do not have permission to edit it",
-      });
+      return res.status(404).json({ error: "Quiz not found or access denied" });
     }
 
     quiz.title = title ?? quiz.title;
@@ -118,6 +142,24 @@ router.put(
     await quiz.save();
 
     res.json({ success: true, quiz });
+  })
+);
+
+// ✅ Delete a quiz
+router.delete(
+  "/:quizId",
+  UserVerification,
+  asyncHandler(async (req, res) => {
+    const quiz = await QuizData.findOneAndDelete({
+      _id: req.params.quizId,
+      userId: req.user.id,
+    });
+
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found or access denied" });
+    }
+
+    res.json({ success: true, message: "Quiz deleted" });
   })
 );
 
