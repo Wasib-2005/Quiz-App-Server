@@ -10,6 +10,7 @@ const userRoutes = require("./routes/userRoutes");
 const quizRoutes = require("./routes/quizRoutes");
 const answersRoutes = require("./routes/answersRoutes");
 const violationRoutes = require("./routes/violationRoutes");
+const roadmapRoutes = require("./routes/roadmapRoutes");
 
 const app = express();
 
@@ -29,6 +30,9 @@ app.use("/api/user", userRoutes);
 app.use("/api/quiz", quizRoutes);
 app.use("/api/answers", answersRoutes);
 app.use("/api/violation", violationRoutes);
+app.use("/api/roadmap", roadmapRoutes);
+
+
 
 app.get("/", (req, res) => res.send("🚀 Quiz App Server running"));
 

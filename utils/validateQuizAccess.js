@@ -20,3 +20,4 @@ module.exports = async function validateQuizAccess(quizCode, userId) {
 
   return quiz;
 };
+ 
